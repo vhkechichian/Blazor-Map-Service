@@ -1,0 +1,702 @@
+﻿@page "/"
+@using Models
+@using Data
+@inject MappingService mappingService
+
+<MapView Id="map" OnClick="@OnMouseClickEvent" @ref="@map" MapUnit="@currentGeographyUnit.GeoUnit" MapViewSizeUnitType="MapViewSizeUnitType.Percentage" Center="@centerPoint"
+    BackgroundColor="new GeoColor(currentMapBackColor.Alpha, currentMapBackColor.Red, currentMapBackColor.Green,currentMapBackColor.Blue)" Zoom="@zoomInt" Width="100" Height="100" OnCurrentExtentChanged="@OnMapExtentChanged" OnMouseMove="@OnMouseMoveEvent">
+    <OverlaysSetting>
+            <LayerOverlay Id="rasterLayer" Layers="@rasterLayerObjects"></LayerOverlay>
+            <LayerOverlay Id="vectorLayer" Layers="@vectorLayerObjects"></LayerOverlay>
+            <LayerOverlay Id="selectionLayers" Layers="@selectionLayers"></LayerOverlay>
+            <LayerOverlay Id="queryLayers" Layers="@queryLayers"></LayerOverlay>
+    </OverlaysSetting>
+    <EditOverlaySetting>
+        <EditOverlay TrackMode="@trackMode" Id="circleTrackLayer" OnFeatureDrawn="@OnFeatureDrawn"></EditOverlay>
+    </EditOverlaySetting>
+    <MapToolsSetting>
+            <MapTools>
+                <ZoomBarMapTool Location="ZoomBarLocation.LowerRight"></ZoomBarMapTool>
+            </MapTools>
+    </MapToolsSetting>
+</MapView>
+
+<div class="control-window card">
+    <DxAccordion ExpandMode="AccordionExpandMode.Multiple" ExpandCollapseAction="AccordionExpandCollapseAction.HeaderClick">
+        <Items>
+            <DxAccordionItem Text="General" Expanded>
+                <ContentTemplate>
+                    <DxFormLayout>
+                        <DxFormLayoutGroup>
+                            <DxFormLayoutItem Caption="UOM: " ColSpanSm="12" Context="MapUnitContext">
+                                <DxComboBox Data="@geographyUnits" TextFieldName="@nameof(MapGeographyUnit.Name)" @bind-Value="@currentGeographyUnit" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Scale To: " ColSpanSm="12" Context="ScaleTextItem">
+                                <DxTextBox @bind-Text="@currentMapScale"></DxTextBox>
+                            </DxFormLayoutItem>
+                        </DxFormLayoutGroup>
+                    </DxFormLayout>
+                    <DxFormLayout>
+                        <DxFormLayoutGroup Caption="Coordinates">
+                            <DxFormLayoutItem Caption="X: " ColSpanSm="12" Context="CurrentScreenX">
+                                <DxTextBox @bind-Text="@xValue"></DxTextBox>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Y: " ColSpanSm="12" Context="CurrentScreenY">
+                                <DxTextBox @bind-Text="@yValue"></DxTextBox>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Mouse Cursor: " ColSpanSm="12" BeginRow="true" Context="CursorPositionContext">
+                                <DxTextBox @bind-Text="@currentMouseCursor"></DxTextBox>
+                            </DxFormLayoutItem>
+                        </DxFormLayoutGroup>
+                    </DxFormLayout>
+                    <DxFormLayout>
+                        <DxFormLayoutGroup Caption="Background Color">
+                            <DxFormLayoutItem Caption="Background Color " ColSpanSm="12" Context="MapBackColorContext">
+                                <DxComboBox Data="@mapColors" TextFieldName="@nameof(MapColor.Name)" @bind-Value="@currentMapBackColor"/>
+                            </DxFormLayoutItem>
+                        </DxFormLayoutGroup>
+                    </DxFormLayout>
+                </ContentTemplate>
+            </DxAccordionItem>
+            <DxAccordionItem Text="Labeling">
+                <ContentTemplate>
+                    <DxFormLayout>
+                        <DxFormLayoutGroup>
+                            <DxFormLayoutItem Caption="Layer: " ColSpanSm="12" Context="VectorLayersContext">
+                                <DxComboBox Data="@vectorLayerObjects" TextFieldName="@nameof(Layer.Name)" Value="@currentVectorLayer4Labeling" ValueChanged="@((Layer layer)=>OnVectorLayer4LabelingChanged(layer))" />
+                            </DxFormLayoutItem>
+                        </DxFormLayoutGroup>
+                        <DxFormLayoutGroup>
+                            <DxFormLayoutItem Caption="Data Field: " ColSpanSm="12" Context="DataFieldContext">
+                                <DxComboBox Data="@dataFieldList" TextFieldName="@nameof(FeatureSourceColumn.ColumnName)" @bind-Value="@currentDataField" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Label Visible: " ColSpanSm="12" Context="LabelVisibleContext">
+                                <DxCheckBox Checked="@visibleVectorLabels" CheckedChanged="@((bool t)=>OnVectorLabelChangedAsync(t,currentDataField,currentVectorLabelColor,currentSelectedVectorLabelColor,currentVectorLabelSize))" Alignment="CheckBoxContentAlignment.Left" LabelPosition="LabelPosition.Right"></DxCheckBox>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Label Size: " ColSpanSm="12" Context="VectorLabelSizeContext">
+                                <DxSpinEdit Value="@currentVectorLabelSize" ValueChanged="((int v)=>OnVectorLabelChangedAsync(visibleVectorLabels,currentDataField,currentVectorLabelColor,currentSelectedVectorLabelColor,v))"></DxSpinEdit>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Label Color " ColSpanSm="12" Context="LabelColorContext">
+                                <DxComboBox Data="@mapColors" TextFieldName="@nameof(MapColor.Name)" Value="@currentVectorLabelColor" ValueChanged="@((MapColor c)=>OnVectorLabelChangedAsync(visibleVectorLabels,currentDataField,c,currentSelectedVectorLabelColor,currentVectorLabelSize))" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Selected Label Color " ColSpanSm="12" Context="SelectedLabelColorContext">
+                                <DxComboBox Data="@mapColors" TextFieldName="@nameof(MapColor.Name)" Value="@currentSelectedVectorLabelColor" ValueChanged="@((MapColor c)=>OnVectorLabelChangedAsync(visibleVectorLabels,currentDataField,currentVectorLabelColor,c,currentVectorLabelSize))" />
+                            </DxFormLayoutItem>
+                        </DxFormLayoutGroup>
+                    </DxFormLayout>
+                </ContentTemplate>
+            </DxAccordionItem>
+            <DxAccordionItem Text="Layer Information">
+                <ContentTemplate>
+                    <DxFormLayout>
+                        <DxFormLayoutGroup>
+                            <DxFormLayoutItem Caption="Layer: " ColSpanSm="12" Context="VectorLayersContext">
+                                <DxComboBox Data="@vectorLayerObjects" TextFieldName="@nameof(Layer.Name)" Value="@currentVectorLayer4Drawing" ValueChanged="@((Layer layer)=>OnVectorLayer4DrawingChanged(layer))" />
+                            </DxFormLayoutItem>
+                        </DxFormLayoutGroup>
+                        <DxFormLayoutGroup>
+                            <DxFormLayoutItem Caption="Boundary Visible: " ColSpanSm="12" Context="BoundaryVisibleContext">
+                                <DxCheckBox Checked="@visibleBoundary" CheckedChanged="@((bool t)=>OnVectorDrawingChangedAsync(t, createSpatialIndex,currentBoundaryPenColor,currentFillColor))" Alignment="CheckBoxContentAlignment.Left" LabelPosition="LabelPosition.Right"></DxCheckBox>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Create Spatial Index: " ColSpanSm="12" Context="CreateSpatialIndexContext">
+                                <DxCheckBox Checked="@createSpatialIndex" CheckedChanged="@((bool t)=>OnVectorDrawingChangedAsync(visibleBoundary, t,currentBoundaryPenColor,currentFillColor))" Alignment="CheckBoxContentAlignment.Left" LabelPosition="LabelPosition.Right"></DxCheckBox>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Pen Color: " ColSpanSm="12" Context="BoundaryPenColorContext">
+                                <DxComboBox Data="@mapColors" TextFieldName="@nameof(MapColor.Name)" Value="@currentBoundaryPenColor" ValueChanged="@((MapColor c) => OnVectorDrawingChangedAsync(visibleBoundary, createSpatialIndex,c,currentFillColor))" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Fill Color: " ColSpanSm="12" Context="FillColorContext">
+                                <DxComboBox Data="@mapColors" TextFieldName="@nameof(MapColor.Name)" Value="@currentFillColor" ValueChanged="@((MapColor c) => OnVectorDrawingChangedAsync(visibleBoundary, createSpatialIndex,currentBoundaryPenColor,c))" />
+                            </DxFormLayoutItem>
+                        </DxFormLayoutGroup>
+                    </DxFormLayout>
+                </ContentTemplate>
+            </DxAccordionItem>
+            <DxAccordionItem Text="Image Layer">
+                <ContentTemplate>
+                    <DxFormLayout>
+                        <DxFormLayoutGroup>
+                            <DxFormLayoutItem Caption="Layer: " ColSpanSm="12" Context="RasterLayersContext">
+                                <DxComboBox Data="@rasterLayerObjects" TextFieldName="@nameof(Layer.Name)" Value="@currentRasterLayer" ValueChanged="@((Layer l)=>OnRasterLayerChanged(l))" />
+                            </DxFormLayoutItem>
+                        </DxFormLayoutGroup>
+                        <DxFormLayoutGroup>
+                            <DxFormLayoutItem Caption="Layer Visible: " ColSpanSm="12" Context="RasterLayerVisibleContext">
+                                <DxCheckBox Checked="@visibleRasterLayer" CheckedChanged="@((bool t)=>OnRasterDrawingChangedAsync(t, currentRasterTransparency,currentRasterRedTransparency,currentRasterGreenTransparency,currentRasterBlueTransparency,rasterNegative,rasterGrayScale))" Alignment="CheckBoxContentAlignment.Left" LabelPosition="LabelPosition.Right"></DxCheckBox>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Alpha(Transparency): " ColSpanSm="12" Context="RasterTransparencyContext">
+                                <DxSpinEdit Value="@currentRasterTransparency" ValueChanged="((float v)=>OnRasterDrawingChangedAsync(visibleBoundary, v,currentRasterRedTransparency,currentRasterGreenTransparency,currentRasterBlueTransparency,rasterNegative,rasterGrayScale))"></DxSpinEdit>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Red: " ColSpanSm="12" Context="RasterRedContext">
+                                <DxSpinEdit Value="@currentRasterRedTransparency" ValueChanged="((float v)=>OnRasterDrawingChangedAsync(visibleBoundary, currentRasterTransparency,v,currentRasterGreenTransparency,currentRasterBlueTransparency,rasterNegative,rasterGrayScale))"></DxSpinEdit>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Green: " ColSpanSm="12" Context="RasterGreenContext">
+                                <DxSpinEdit Value="@currentRasterGreenTransparency" ValueChanged="((float v)=>OnRasterDrawingChangedAsync(visibleBoundary, currentRasterTransparency,currentRasterRedTransparency,v,currentRasterBlueTransparency,rasterNegative,rasterGrayScale))"></DxSpinEdit>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Blue: " ColSpanSm="12" Context="RasterBlueContext">
+                                <DxSpinEdit Value="@currentRasterBlueTransparency" ValueChanged="((float v)=>OnRasterDrawingChangedAsync(visibleBoundary, currentRasterTransparency,currentRasterRedTransparency,currentRasterGreenTransparency,v,rasterNegative,rasterGrayScale))"></DxSpinEdit>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Negative: " ColSpanSm="12" Context="RasterNegativeContext">
+                                <DxCheckBox Checked="@rasterNegative" CheckedChanged="@((bool t)=>OnRasterDrawingChangedAsync(visibleBoundary, currentRasterTransparency,currentRasterRedTransparency,currentRasterGreenTransparency,currentRasterBlueTransparency,t,rasterGrayScale))" Alignment="CheckBoxContentAlignment.Left" LabelPosition="LabelPosition.Right"></DxCheckBox>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="GrayScale: " ColSpanSm="12" Context="RasterLayerVisibleContext">
+                                <DxCheckBox Checked="@rasterGrayScale" CheckedChanged="@((bool t)=>OnRasterDrawingChangedAsync(visibleBoundary, currentRasterTransparency,currentRasterRedTransparency,currentRasterGreenTransparency,currentRasterBlueTransparency,rasterNegative,t))" Alignment="CheckBoxContentAlignment.Left" LabelPosition="LabelPosition.Right"></DxCheckBox>
+                            </DxFormLayoutItem>
+                        </DxFormLayoutGroup>
+                    </DxFormLayout>
+                </ContentTemplate>
+            </DxAccordionItem>
+            <DxAccordionItem Text="Search Layer">
+                <ContentTemplate>
+                    <DxFormLayout>
+                        <DxButton CssClass="btn btn-primary" Context="ClearSelectionButton" RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Contained" Click="@OnClearSelection">Clear Selection</DxButton>
+                        <DxFormLayoutGroup>
+                            <DxFormLayoutItem Caption="Layer: " ColSpanSm="12" Context="SearchVectorLayersContext">
+                                <DxComboBox Data="@vectorLayerObjects" TextFieldName="@nameof(Layer.Name)" Value="@currentVectorLayer4Search" ValueChanged="@((Layer layer)=>OnVectorLayer4SearchChanged(layer))" />
+                            </DxFormLayoutItem>
+                        </DxFormLayoutGroup>
+                        <DxFormLayoutGroup Caption="Select On DataField">
+                            <DxFormLayoutItem Caption="Data Field: " ColSpanSm="12" Context="SearchDataFieldContext">
+                                <DxComboBox Data="@searchDataFieldList" TextFieldName="@nameof(FeatureSourceColumn.ColumnName)" @bind-Value="@currentSearchDataField" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem ColSpanSm="12" Caption="Search Text" Context="SearchContext">
+                                <DxTextBox @bind-Text="@searchText"></DxTextBox>
+                            </DxFormLayoutItem>
+                            <DxButton CssClass="btn btn-primary" Context="SearchButton" RenderStyle="ButtonRenderStyle.Success" RenderStyleMode="ButtonRenderStyleMode.Contained" Click="@OnSearchLayer">Select</DxButton>
+                        </DxFormLayoutGroup>
+                        <DxFormLayoutGroup Caption="Select On Shape">
+                            <DxFormLayoutGroup Caption="Draw Shape">
+                                <DxButton CssClass="btn btn-primary" Context="ClearDrawingButton" RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Contained" Click="@OnClearDrawing">Clear Drawing</DxButton>
+                                <DxFormLayoutGroup Caption="Draw Circle">
+                                    <DxButton CssClass="btn btn-primary" Context="SearchOnCircleButton" RenderStyle="@btnForCircleDrawingRenderStyle" RenderStyleMode="ButtonRenderStyleMode.Contained" Click="@OnDrawingCircle">@drawingCircleBtnTxt</DxButton>
+                                    <DxFormLayoutItem Caption="Radius: " ColSpanSm="12" Context="CircleRadiusContext">
+                                        <DxSpinEdit Value="@currentRadiusValue" ValueChanged="((double v)=>OnRadiusValueChanged(v))"></DxSpinEdit>
+                                    </DxFormLayoutItem>        
+                                </DxFormLayoutGroup>
+                                <DxFormLayoutGroup Caption="Draw Polygon Buffer">
+                                    <DxFormLayoutItem Caption="Distance(m): " ColSpanSm="12" Context="BufferDistanceContext">
+                                        <DxSpinEdit Value="@currentBufferValue" ValueChanged="((double v)=>OnBufferValueChanged(v))"></DxSpinEdit>
+                                    </DxFormLayoutItem>
+                                    <DxButton CssClass="btn btn-primary" Context="SelectParcelButton" RenderStyle="@btnForSelectPolygonRenderStyle" RenderStyleMode="ButtonRenderStyleMode.Contained" Click="@OnSelectingPolygon">@selectPolygonBtnTxt</DxButton>
+                                </DxFormLayoutGroup>
+                            </DxFormLayoutGroup>
+                            <DxButton CssClass="btn btn-primary" Context="SearchButton" RenderStyle="ButtonRenderStyle.Success" RenderStyleMode="ButtonRenderStyleMode.Contained" Click="@OnSelectSpatialQueryLayer">Select</DxButton>
+                        </DxFormLayoutGroup>
+                    </DxFormLayout>
+                </ContentTemplate>
+            </DxAccordionItem>
+        </Items>
+    </DxAccordion>
+</div>
+@if (map == null)
+{
+    <div class="loading-spinner text-center" id="loadingBtn">
+        <div class="spinner-border text-success"></div>
+    </div>
+}
+@code{
+    // MapView parameters
+    private MapView? map;
+    private PointShape centerPoint = new PointShape(-8137421, 5133000);
+    private int zoomInt = 16;
+    private GeoCollection<Layer> vectorLayerObjects = new GeoCollection<Layer>();
+    private GeoCollection<Layer> rasterLayerObjects = new GeoCollection<Layer>();
+    private GeoCollection<Layer> selectionLayers = new GeoCollection<Layer>();
+    private GeoCollection<Layer> queryLayers = new GeoCollection<Layer>();
+    private IEnumerable<MapColor>? mapColors { get; set; }
+    // Initial Loading Parameters
+    private IEnumerable<Models.VectorLayer>? sqlVectorLayers {get;set;}
+    private IEnumerable<Models.RasterLayer>? mosaicRasterLayers {get;set;}
+
+    // General Control Parameters
+    private MapGeographyUnit currentGeographyUnit { get; set; } = new MapGeographyUnit();
+    private IEnumerable<MapGeographyUnit>? geographyUnits { get; set; }
+    private MapColor currentMapBackColor { get; set; } = new MapColor();
+
+    private string currentMapScale { get; set; } = "";
+    private string xValue { get; set; } = "";
+    private string yValue { get; set; } = "";
+    private string currentMouseCursor { get; set; } = "";
+    private bool visibleVectorLabels { get; set; }
+    private bool visibleBoundary  {get; set; }
+    private bool createSpatialIndex { get; set; }
+    private bool visibleRasterLayer { get; set; }
+    private int vectorLabelSize { get; set; }
+    private bool rasterNegative {get;set;}
+    private bool rasterGrayScale { get; set; }
+    private MapColor currentVectorLabelColor { get; set; } = null!;
+    private MapColor currentSelectedVectorLabelColor { get; set; } = null!;
+
+    private IEnumerable<VectorLayer>? vectorLayerList{ get; set; }
+
+    private Layer currentVectorLayer4Labeling { get; set; } = null!;
+    private Layer currentVectorLayer4Drawing { get; set; } = null!;
+    private Layer currentVectorLayer4Search { get; set; } = null!;
+    private InMemoryFeatureLayer? selectionLayer { get; set; }
+    private InMemoryFeatureLayer? queryLayer { get; set; }
+
+    private Layer currentRasterLayer { get; set; } = null!;
+    private IEnumerable<FeatureSourceColumn>? dataFieldList { get; set; }
+    private FeatureSourceColumn currentDataField { get; set; } = null!;
+    private IEnumerable<FeatureSourceColumn>? searchDataFieldList { get; set; }
+    private FeatureSourceColumn currentSearchDataField { get; set; } = null!;
+
+    private TextStyle? vectorLabelTextStyle ;
+    private TextStyle? vectorLabelSelectedTextStyle ;
+    private AreaStyle? areaStyle;
+    private AreaStyle? selectedAreaStyle;
+    private int currentVectorLabelSize { get; set; }
+    private MapColor currentBoundaryPenColor { get; set; } = null!;
+    private MapColor currentFillColor { get; set; } = null!;
+    private float currentRasterTransparency { get; set; }
+    private float currentRasterRedTransparency { get; set; }
+    private float currentRasterGreenTransparency { get; set; }
+    private float currentRasterBlueTransparency { get; set; }
+    private string searchText { get; set; } ="";
+    private bool VisibleSideBar { get; set; }
+    private Feature drawedFeature { get; set; } = null!;
+    private TrackMode trackMode = TrackMode.None;
+    private string drawingCircleBtnTxt { get; set; } = "";
+    private string selectPolygonBtnTxt { get; set; } = "";
+    private double currentRadiusValue { get; set; }
+    private double currentBufferValue { get; set; }
+    private ButtonRenderStyle btnForCircleDrawingRenderStyle { get; set; }
+    private ButtonRenderStyle btnForSelectPolygonRenderStyle { get; set; }
+    private bool visibleCircle { get; set; }
+    //flag for identify mouse selecting parcels of vector layer.
+    private bool isSelectingPolygon {get;set;}
+    //flag for identify drawing circle
+    private bool isDrawingCircle { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        //load inital layers
+        sqlVectorLayers = await mappingService.GetMapVectorLayers();
+        mosaicRasterLayers = await mappingService.GetMapRasterLayers();
+        mapColors = await mappingService.GetMapColorsAsync();
+        currentMapBackColor = mapColors.FirstOrDefault()!;
+
+        visibleCircle = true;
+        geographyUnits = Enum.GetValues(typeof(GeographyUnit)).Cast<GeographyUnit>().Select(t => new MapGeographyUnit{ GeoUnit = t, Name = t.ToString()});
+        currentGeographyUnit = geographyUnits.LastOrDefault()!;
+        // load Raster Layers
+        for(int i = 0; i < mosaicRasterLayers.Count(); i++)
+        {
+            MrSidRasterLayer mrSidRasterLayer = new MrSidRasterLayer(mosaicRasterLayers.ElementAt(i).LayerFileName);
+            mrSidRasterLayer.ImageSource.ProjectionConverter = new UnmanagedProjectionConverter(2234, 3857);
+            mrSidRasterLayer.Name = mosaicRasterLayers.ElementAt(i).Name;
+            rasterLayerObjects.Add(mrSidRasterLayer);
+            visibleRasterLayer = mosaicRasterLayers.ElementAt(i).IsVisible;
+        }
+
+        // load Vector Layers
+        for(int i =0; i< sqlVectorLayers.Count(); i++)
+        {
+            string ConnectionStr = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog="+sqlVectorLayers.ElementAt(i).LayerDBName+";Integrated Security=True;Connect Timeout=30;Encrypt=False;TrustServerCertificate=False;ApplicationIntent=ReadWrite;MultiSubnetFailover=False";
+            SqlServerFeatureLayer vLayer = new SqlServerFeatureLayer(ConnectionStr, sqlVectorLayers.ElementAt(i).LayerTableName, "ID");
+            vLayer.FeatureSource.ProjectionConverter = new ProjectionConverter(sqlVectorLayers.ElementAt(i).EPSGID, 3857);
+            vLayer.Name = sqlVectorLayers.ElementAt(i).Name;
+
+            //load inital style
+            currentVectorLabelSize = sqlVectorLayers.ElementAt(i).LabelSize;
+            MapColor textColor = mapColors.Where(c => c.ID == sqlVectorLayers.ElementAt(i).TextColor).First();
+            MapColor highlighttextColor = mapColors.Where(c => c.ID == sqlVectorLayers.ElementAt(i).HighlightTextColor).First();
+            vectorLabelTextStyle = new TextStyle(sqlVectorLayers.ElementAt(i).LabelingDataField, new GeoFont("Arial", currentVectorLabelSize, DrawingFontStyles.Regular), new GeoSolidBrush(new GeoColor(textColor.Alpha,textColor.Red,textColor.Green,textColor.Blue)));
+            vectorLabelSelectedTextStyle = new TextStyle(sqlVectorLayers.ElementAt(i).LabelingDataField, new GeoFont("Arial", currentVectorLabelSize, DrawingFontStyles.Regular), new GeoSolidBrush(new GeoColor(highlighttextColor.Alpha, highlighttextColor.Red, highlighttextColor.Green, highlighttextColor.Blue)));
+            currentBoundaryPenColor = mapColors.Where(c => c.ID == sqlVectorLayers.ElementAt(i).PenColor).FirstOrDefault()!;
+            currentFillColor = mapColors.Where(c => c.ID == sqlVectorLayers.ElementAt(i).FillColor).FirstOrDefault()!;
+            areaStyle = new AreaStyle(new GeoPen(new GeoColor(currentBoundaryPenColor.Alpha, currentBoundaryPenColor.Red, currentBoundaryPenColor.Green, currentBoundaryPenColor.Blue)), 
+            new GeoSolidBrush(new GeoColor(currentFillColor.Alpha,currentFillColor.Red,currentFillColor.Green,currentFillColor.Blue)));
+            vLayer.ZoomLevelSet.ZoomLevel01.DefaultTextStyle = vectorLabelTextStyle;
+            vLayer.ZoomLevelSet.ZoomLevel01.DefaultAreaStyle = areaStyle;
+            // initialize style for selection layer
+            MapColor selectedPenColor = mapColors.Where(c => c.ID == sqlVectorLayers.ElementAt(i).SelectedPenColor).First();
+            MapColor selectedFillColor = mapColors.Where(c => c.ID == sqlVectorLayers.ElementAt(i).SelectedFillColor).First();
+            selectedAreaStyle = new AreaStyle(new GeoPen(new GeoColor(selectedPenColor.Alpha, selectedPenColor.Red, selectedPenColor.Green, selectedPenColor.Blue)), new GeoSolidBrush(new GeoColor(selectedFillColor.Alpha, selectedFillColor.Red, selectedFillColor.Green, selectedFillColor.Blue)));
+            vLayer.ZoomLevelSet.ZoomLevel01.ApplyUntilZoomLevel = ApplyUntilZoomLevel.Level20;
+            visibleVectorLabels = sqlVectorLayers.ElementAt(i).LabelVisible;
+            visibleBoundary = sqlVectorLayers.ElementAt(i).BoundaryVisible;
+            vectorLayerObjects.Add(vLayer);
+        }
+        //initialize the layer for selecting
+        selectionLayer = new InMemoryFeatureLayer();
+        selectionLayer.ZoomLevelSet.ZoomLevel01.DefaultAreaStyle = selectedAreaStyle;
+        selectionLayer.ZoomLevelSet.ZoomLevel01.DefaultTextStyle = vectorLabelSelectedTextStyle;
+        selectionLayer.ZoomLevelSet.ZoomLevel01.ApplyUntilZoomLevel = ApplyUntilZoomLevel.Level20;
+        selectionLayers.Add(selectionLayer);
+        // initialize the layer for drawing
+        queryLayer = new InMemoryFeatureLayer();
+        queryLayer.ZoomLevelSet.ZoomLevel01.DefaultAreaStyle = new AreaStyle(new GeoPen(GeoColors.Blue,2),new GeoSolidBrush(new GeoColor(20,GeoColors.Blue)));
+        queryLayer.ZoomLevelSet.ZoomLevel01.DefaultTextStyle = vectorLabelSelectedTextStyle;
+        queryLayer.ZoomLevelSet.ZoomLevel01.ApplyUntilZoomLevel = ApplyUntilZoomLevel.Level20;
+        queryLayers.Add(queryLayer);
+        // initialize the current vector layer
+        currentVectorLayer4Labeling = vectorLayerObjects.FirstOrDefault()!;
+        currentVectorLayer4Drawing = vectorLayerObjects.FirstOrDefault()!;
+        currentVectorLayer4Search = vectorLayerObjects.FirstOrDefault()!;
+        currentRasterLayer = rasterLayerObjects.FirstOrDefault()!;
+
+        isDrawingCircle = false;
+        SetCircleButtonIsDrawing(isDrawingCircle);
+        isSelectingPolygon = false;
+        SetPolygonButtenIsSelecting(isSelectingPolygon);
+
+        OnVectorLayer4LabelingChanged(currentVectorLayer4Labeling);
+        OnVectorLayer4DrawingChanged(currentVectorLayer4Drawing);
+        OnRasterLayerChanged(currentRasterLayer);
+        await base.OnInitializedAsync();
+    }
+
+    private void OnFeatureDrawn(FeatureDrawnEditOverlayEventArgs args)
+    {
+        drawedFeature = args.DrawnFeature;
+        currentRadiusValue = Math.Round(drawedFeature.GetShape().GetBoundingBox().Height / 2, 4);
+        isDrawingCircle = false;
+        SetCircleButtonIsDrawing(isDrawingCircle);
+    }
+
+    private void OnDrawingCircle(MouseEventArgs args)
+    {
+
+        isDrawingCircle = !isDrawingCircle;
+        SetCircleButtonIsDrawing(isDrawingCircle);
+    }
+
+    private void SetCircleButtonIsDrawing(bool isDrawing)
+    {
+        if (isDrawing)
+        {
+            drawingCircleBtnTxt = "Stop Drawing";
+            btnForCircleDrawingRenderStyle = ButtonRenderStyle.Danger;
+            trackMode = TrackMode.Circle;
+        }
+        else
+        {
+            drawingCircleBtnTxt = "Start Drawing";
+            btnForCircleDrawingRenderStyle = ButtonRenderStyle.Success;
+            trackMode = TrackMode.None;
+        }
+    }
+    private void SetPolygonButtenIsSelecting(bool isSelecting)
+    {
+        if (isSelecting)
+        {
+            selectPolygonBtnTxt = "Stop Selecting";
+            btnForSelectPolygonRenderStyle = ButtonRenderStyle.Danger;
+        }
+        else
+        {
+            selectPolygonBtnTxt = "Start Selecting";
+            btnForSelectPolygonRenderStyle = ButtonRenderStyle.Success;
+        }
+    }
+    private void OnSelectingPolygon(MouseEventArgs args)
+    {
+        isSelectingPolygon = !isSelectingPolygon;
+        SetPolygonButtenIsSelecting(isSelectingPolygon);
+    }
+
+    private void OnRadiusValueChanged(double value)
+    {
+        if (drawedFeature != null && map!=null)
+        {
+            drawedFeature.GetShape().ScaleTo(value/currentRadiusValue);
+            map.EditOverlay.RedrawAsync();
+        }
+    }
+    private void OnBufferValueChanged(double value)
+    {
+        currentBufferValue = value;
+    }
+    private void OnMapExtentChanged(CurrentExtentChangedMapViewEventArgs args)
+    {
+        if (map != null)
+        {
+            ZoomLevel zoomLevel = new ZoomLevelSet().GetZoomLevel(args.CurrentExtent, map.Width, map.MapUnit);
+            double scale = Math.Round(zoomLevel.Scale,3);
+            currentMapScale = Convert.ToString(scale);
+        }
+    }
+    private void OnMouseClickEvent(ClickedMapViewEventArgs args)
+    {
+        if(isSelectingPolygon)
+        {
+            if (currentVectorLayer4Search != null && map != null && queryLayer != null)
+            {
+                FeatureLayer featureLayer = (FeatureLayer)currentVectorLayer4Search;
+                featureLayer.Open();
+                System.Collections.ObjectModel.Collection<Feature> features = featureLayer.QueryTools.GetFeaturesNearestTo(new PointShape(args.WorldX,args.WorldY),map.MapUnit,1,ReturningColumnsType.AllColumns);
+                featureLayer.Close();
+                if (features.Count > 0)
+                {
+
+                    MultipolygonShape selectedPolygon = PolygonShape.Union(features);
+                    Feature sp = new Feature(selectedPolygon);
+                    // Get selected area shape
+                    AreaBaseShape baseShape = (AreaBaseShape)sp.GetShape();
+                    // Get Buffer of the base shape
+                    MultipolygonShape bufferShape = baseShape.Buffer(currentBufferValue,map.MapUnit,DistanceUnit.Meter);
+                    Feature bufferFeature = new Feature(bufferShape);
+
+                    // Draw Buffer shape as a feature into the Editting Layer Overlays and set drawedFeature
+                    drawedFeature = bufferFeature;
+                    queryLayer.InternalFeatures.Add(bufferFeature);
+                    if (map != null)
+                    {
+                        map.Overlays["queryLayers"].RedrawAsync();
+                    }
+                }
+                isSelectingPolygon = false;
+                SetPolygonButtenIsSelecting(isSelectingPolygon);
+            }
+        }
+    }
+    private void OnSearchLayer(MouseEventArgs args)
+    {
+        if(searchText !=null && searchText != "" && selectionLayer != null)
+        {
+            if (currentVectorLayer4Search != null && currentSearchDataField != null)
+            {
+                FeatureLayer featureLayer = (FeatureLayer)currentVectorLayer4Search;
+                featureLayer.Open();
+                System.Collections.ObjectModel.Collection<Feature> features = featureLayer.QueryTools.GetFeaturesByColumnValue(currentSearchDataField.ColumnName, searchText);
+                featureLayer.Close();
+                if (features.Count > 0)
+                {
+
+                    MultipolygonShape selectedPolygon = PolygonShape.Union(features);
+                    Feature sp = new Feature(selectedPolygon);
+                    selectionLayer.InternalFeatures.Add(sp);
+
+                    if (map != null)
+                    {
+                        map.Overlays["selectionLayers"].RedrawAsync();
+                    }
+                }
+            }
+        }
+    }
+
+    private void OnSelectSpatialQueryLayer(MouseEventArgs args)
+    {
+        if (currentVectorLayer4Search != null && drawedFeature != null && selectionLayer != null)
+        {
+            FeatureLayer featureLayer = (FeatureLayer)currentVectorLayer4Search;
+            featureLayer.Open();
+            System.Collections.ObjectModel.Collection<Feature> selectedfeatures = featureLayer.FeatureSource.SpatialQuery(drawedFeature.GetShape(), QueryType.Intersects, ReturningColumnsType.AllColumns);
+            featureLayer.Close();
+
+            MultipolygonShape selectedPolygon = PolygonShape.Union(selectedfeatures);
+            Feature sp = new Feature(selectedPolygon);
+            selectionLayer.InternalFeatures.Add(sp);
+            if (!visibleCircle)
+            {
+                selectionLayers.Clear();
+            }
+            if (map != null)
+            {
+                map.Overlays["selectionLayers"].RedrawAsync();
+            }
+        }
+    }
+    private void OnClearSelection()
+    {
+        if(selectionLayer != null){
+            selectionLayer.Open();
+            selectionLayer.Clear();
+        }
+        if (map != null)
+        {
+            map.Overlays["selectionLayers"].RedrawAsync();
+        }
+    }
+    private void OnClearDrawing()
+    {
+        if(queryLayer != null){
+            queryLayer.Open();
+            queryLayer.Clear();
+        }
+        
+        if(map != null){
+            map.EditOverlay.Features.Clear();
+            map.EditOverlay.RedrawAsync();
+            map.Overlays["queryLayers"].RedrawAsync();
+        }
+    }
+    private async Task OnVectorLabelChangedAsync(bool layerVisible, FeatureSourceColumn datafield, MapColor penColor, MapColor selPenColor, int size)
+    {
+        visibleVectorLabels = layerVisible;
+        currentDataField = datafield;
+        currentVectorLabelColor = penColor;
+        currentSelectedVectorLabelColor = selPenColor;
+        currentVectorLabelSize = size;
+        if (currentVectorLayer4Labeling != null)
+        {
+            if (layerVisible)
+            {
+                vectorLabelTextStyle = new TextStyle(datafield.ColumnName, new GeoFont("Arial", size, DrawingFontStyles.Regular), new GeoSolidBrush(new GeoColor(penColor.Alpha, penColor.Red, penColor.Green, penColor.Blue)));
+                vectorLabelSelectedTextStyle = new TextStyle(datafield.ColumnName, new GeoFont("Arial", size, DrawingFontStyles.Regular), new GeoSolidBrush(new GeoColor(selPenColor.Alpha, selPenColor.Red, selPenColor.Green, selPenColor.Blue)));
+            }
+            else
+            {
+                vectorLabelTextStyle = null;
+                vectorLabelSelectedTextStyle = null;
+            }
+            FeatureLayer featureLayer = (FeatureLayer) currentVectorLayer4Labeling;
+            featureLayer.ZoomLevelSet.ZoomLevel01.DefaultTextStyle = vectorLabelTextStyle;
+            await RedrawVectorMapAsync();
+            await RedrawEditingMapAsync();
+        }
+    }
+
+    private async Task OnVectorDrawingChangedAsync(bool boundaryVisible, bool sp, MapColor pColor, MapColor fColor)
+    {
+        visibleBoundary = boundaryVisible;
+        createSpatialIndex = sp;
+        currentBoundaryPenColor = pColor;
+        currentFillColor = fColor;
+        if (currentVectorLayer4Drawing != null && areaStyle!=null)
+        {
+            if (boundaryVisible)
+            {
+                areaStyle = new AreaStyle(new GeoPen(new GeoColor(pColor.Alpha, pColor.Red, pColor.Green, pColor.Blue)), new GeoSolidBrush(new GeoColor(fColor.Alpha, fColor.Red, fColor.Green, fColor.Blue)));
+            }
+            else
+            {
+                areaStyle = new AreaStyle(new GeoPen(GeoColors.Transparent), new GeoSolidBrush(new GeoColor(fColor.Alpha, fColor.Red, fColor.Green, fColor.Blue)));
+            }
+            FeatureLayer featureLayer = (FeatureLayer)currentVectorLayer4Drawing;
+            featureLayer.ZoomLevelSet.ZoomLevel01.DefaultAreaStyle = areaStyle;
+            await RedrawVectorMapAsync();
+        }
+
+    }
+    private void OnRasterLayerChanged(Layer layer)
+    {
+        currentRasterLayer = layer;
+        if (layer != null && mosaicRasterLayers != null)
+        {
+            Models.RasterLayer crasterLayer = mosaicRasterLayers.Where(v => v.Name == layer.Name).FirstOrDefault()!;
+            if (crasterLayer != null)
+            {
+                visibleRasterLayer = crasterLayer.IsVisible;
+                rasterNegative = crasterLayer.Nagative;
+                rasterGrayScale = crasterLayer.GrayScale;
+                currentRasterTransparency = crasterLayer.Alpha;
+                currentRasterRedTransparency = crasterLayer.RedTranslation;
+                currentRasterGreenTransparency = crasterLayer.GreenTranslation;
+                currentRasterBlueTransparency = crasterLayer.BlueTranslation;
+            }
+        }
+    }
+    private async Task OnRasterDrawingChangedAsync(bool rasterVisibleChecked, float alpha, float red, float green, float blue, bool negativeChecked, bool grayScaleChecked)
+    {
+        visibleRasterLayer = rasterVisibleChecked;
+        rasterNegative = negativeChecked;
+        rasterGrayScale = grayScaleChecked;
+        if(currentRasterLayer != null)
+        {
+            currentRasterLayer.IsVisible = rasterVisibleChecked;
+            ThinkGeo.Core.RasterLayer rLayer = (ThinkGeo.Core.RasterLayer)currentRasterLayer;
+            rLayer.ImageSource.Transparency = alpha;
+            rLayer.ImageSource.RedTranslation = red;
+            rLayer.ImageSource.GreenTranslation = green;
+            rLayer.ImageSource.BlueTranslation = blue;
+            await RedrawRasterMapAsync();
+        }
+    }
+
+    private void OnMouseMoveEvent(MouseMovingMapViewEventArgs args)
+    {
+        currentMouseCursor = Convert.ToString(Math.Round(args.WorldX, 3)) + ", " + Convert.ToString(Math.Round(args.WorldY,3));
+        xValue = Convert.ToString(args.ScreenX);
+        yValue = Convert.ToString(args.ScreenY);
+    }
+
+    private void OnVectorLayer4LabelingChanged(Layer cLayer)
+    {
+        currentVectorLayer4Labeling = cLayer;
+        if(cLayer != null)
+        {
+            FeatureLayer fLayer = (FeatureLayer)cLayer;
+            if (fLayer != null && sqlVectorLayers != null)
+            {
+                fLayer.FeatureSource.Open();
+                dataFieldList = fLayer.FeatureSource.GetColumns();
+                fLayer.FeatureSource.Close();
+                VectorLayer cvectorLayer = sqlVectorLayers.Where(v => v.Name == cLayer.Name).FirstOrDefault()!;
+                if (cvectorLayer != null && mapColors!= null)
+                {
+                    visibleVectorLabels = cvectorLayer.LabelVisible;
+                    currentVectorLabelColor = mapColors.Where(m => m.ID == cvectorLayer.TextColor).FirstOrDefault()!;
+                    currentSelectedVectorLabelColor = mapColors.Where(m => m.ID == cvectorLayer.HighlightTextColor).FirstOrDefault()!;
+                    currentDataField = new FeatureSourceColumn(cvectorLayer.LabelingDataField);
+                    currentVectorLabelSize = cvectorLayer.LabelSize;
+                }
+            }
+        }
+
+
+    }
+
+    private void OnVectorLayer4DrawingChanged(Layer dLayer)
+    {
+        currentVectorLayer4Drawing = dLayer!;
+        if (dLayer != null && sqlVectorLayers != null)
+        {
+            FeatureLayer fLayer = (FeatureLayer)dLayer;
+            VectorLayer cvectorLayer = sqlVectorLayers.Where(v => v.Name == dLayer.Name).FirstOrDefault()!;
+            if (cvectorLayer != null && mapColors != null)
+            {
+                visibleBoundary = cvectorLayer.BoundaryVisible;
+                createSpatialIndex = cvectorLayer.CreateSpatialIdx;
+                currentBoundaryPenColor = mapColors.Where(m=>m.ID == cvectorLayer.PenColor).FirstOrDefault()!;
+                currentFillColor = mapColors.Where(m => m.ID == cvectorLayer.FillColor).FirstOrDefault()!;
+            }
+        }
+    }
+    private void OnVectorLayer4SearchChanged(Layer sLayer)
+    {
+        currentVectorLayer4Search = sLayer!;
+        if (sLayer != null)
+        {
+            FeatureLayer fLayer = (FeatureLayer)sLayer;
+            if (fLayer != null)
+            {
+                fLayer.FeatureSource.Open();
+                searchDataFieldList = fLayer.FeatureSource.GetColumns();
+                fLayer.FeatureSource.Close();
+            }
+        }
+    }
+    private async Task RedrawVectorMapAsync()
+    {
+        if (map != null)
+        {
+            if (map.IsLoaded)
+            {
+                await map.Overlays["vectorLayer"].RedrawAsync();
+            }
+        }
+    }
+    private async Task RedrawRasterMapAsync()
+    {
+        if (map != null)
+        {
+            if (map.IsLoaded)
+            {
+                await map.Overlays["rasterLayer"].RedrawAsync();
+            }
+        }
+    }
+    private void OnCircleVisibleChanged(bool isVisible)
+    {
+        visibleCircle = isVisible;
+    }
+    private async Task RedrawEditingMapAsync()
+    {
+        if (map != null)
+        {
+            await map.Overlays["selectionLayers"].RedrawAsync();
+        }
+    }
+}

@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+https://go.microsoft.com/fwlink/?LinkID=208121.
+-->
+<Project>
+  <PropertyGroup>
+    <_PublishTargetUrl>D:\MyProject\BlazorMap\Map\Map\bin\Release\net7.0\publish\</_PublishTargetUrl>
+    <History>True|2023-01-16T11:00:36.5271042Z;False|2023-01-16T05:58:03.1413055-05:00;True|2023-01-16T01:13:25.3243140-05:00;</History>
+    <LastFailureDetails />
+  </PropertyGroup>
+</Project>
