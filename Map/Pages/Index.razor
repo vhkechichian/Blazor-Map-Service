@@ -196,7 +196,7 @@
 @code{
     // MapView parameters
     private MapView? map;
-    private PointShape centerPoint = new PointShape(-8137421, 5133000);
+    private PointShape centerPoint = new PointShape(0, 0);
     private int zoomInt = 16;
     private GeoCollection<Layer> vectorLayerObjects = new GeoCollection<Layer>();
     private GeoCollection<Layer> rasterLayerObjects = new GeoCollection<Layer>();
@@ -315,7 +315,26 @@
             vLayer.ZoomLevelSet.ZoomLevel01.ApplyUntilZoomLevel = ApplyUntilZoomLevel.Level20;
             visibleVectorLabels = sqlVectorLayers.ElementAt(i).LabelVisible;
             visibleBoundary = sqlVectorLayers.ElementAt(i).BoundaryVisible;
+
+            LineStyle lineStyle = new LineStyle();
+            lineStyle.InnerPen = new GeoPen(new GeoColor(currentBoundaryPenColor.Alpha, currentBoundaryPenColor.Red, currentBoundaryPenColor.Green, currentBoundaryPenColor.Blue));
+            lineStyle.OuterPen = new GeoPen(new GeoColor(currentBoundaryPenColor.Alpha, currentBoundaryPenColor.Red, currentBoundaryPenColor.Green, currentBoundaryPenColor.Blue));
+            lineStyle.CenterPen = new GeoPen(new GeoColor(currentFillColor.Alpha, currentFillColor.Red, currentFillColor.Green, currentFillColor.Blue));
+
+            vLayer.ZoomLevelSet.ZoomLevel01.DefaultLineStyle = lineStyle;
             vectorLayerObjects.Add(vLayer);
+            if(map!= null && i == sqlVectorLayers.Count()-1)
+            {
+                if(sqlVectorLayers.ElementAt(i).CenterX == 0 || sqlVectorLayers.ElementAt(i).CenterY == 0){
+                    vLayer.Open();
+                    centerPoint = vLayer.GetBoundingBox().GetCenterPoint();
+                    vLayer.Close();
+                }
+                else{
+                    centerPoint = new PointShape(sqlVectorLayers.ElementAt(i).CenterX, sqlVectorLayers.ElementAt(i).CenterY);
+                }
+                zoomInt = sqlVectorLayers.ElementAt(i).ZoomLevel;
+            }
         }
         //initialize the layer for selecting
         selectionLayer = new InMemoryFeatureLayer();

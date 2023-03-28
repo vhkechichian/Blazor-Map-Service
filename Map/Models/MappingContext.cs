@@ -78,6 +78,9 @@ namespace Map.Models
         public int SelectedFillColor { get; set; }
         public bool LabelVisible { get; set; }
         public int LabelSize { get; set; }
+        public int ZoomLevel { get; set; }
+        public double CenterX { get; set; }
+        public double CenterY { get; set; }
     }
     public class RasterLayer
     {
